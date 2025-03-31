@@ -43,6 +43,10 @@ public class CORPairs extends Configured implements Tool {
 	 */
 	private static class CORMapper1 extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
+		
+		private final static IntWritable ONE = new IntWritable(1);
+		private final static Text WORD = new Text();
+		
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
@@ -53,6 +57,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while(doc_tokenizer.hasMoreTokens()){
+				String word = doc_tokenizer.nextToken();
+				WORD.set(word);
+				context.write(WORD, ONE);
+			}
 		}
 	}
 
@@ -61,11 +70,20 @@ public class CORPairs extends Configured implements Tool {
 	 */
 	private static class CORReducer1 extends
 			Reducer<Text, IntWritable, Text, IntWritable> {
+
+		private final static IntWritable VALUE = new IntWritable();
+
 		@Override
 		public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for(IntWritable value : values){
+				sum += value.get();
+			}
+			VALUE.set(sum);
+			context.write(key, VALUE);
 		}
 	}
 
@@ -74,6 +92,10 @@ public class CORPairs extends Configured implements Tool {
 	 * TODO: Write your second-pass Mapper here.
 	 */
 	public static class CORPairsMapper2 extends Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
+		
+		private static final IntWritable ONE = new IntWritable(1);
+		private static final PairOfStrings BIGRAM = new PairOfStrings();
+
 		@Override
 		protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			// Please use this tokenizer! DO NOT implement a tokenizer by yourself!
@@ -81,6 +103,20 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			Set<String> uniqueWords = new HashSet<String>();
+			while(doc_tokenizer.hasMoreTokens()){
+				String word =  doc_tokenizer.nextToken();
+				uniqueWords.add(word);
+			}
+			List<String> sortedWords = new ArrayList<String>(uniqueWords);
+			Collections.sort(sortedWords);
+
+			for(int i = 0; i < sortedWords.size(); i++){
+				for(int j = i + 1 ; j < sortedWords.size(); j++){
+					BIGRAM.set(sortedWords.get(i), sortedWords.get(j));
+					context.write(BIGRAM, ONE);
+				}
+			}
 		}
 	}
 
@@ -93,6 +129,13 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+
+			for(IntWritable value : values){
+				sum += value.get();
+			}
+
+			context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -145,6 +188,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for(IntWritable value : values){
+				double numerator = value.get();
+				int denominator = word_total_map.get(key.getLeftElement().toString()) * word_total_map.get(key.getRightElement().toString());
+				context.write(key ,new DoubleWritable(numerator / denominator));
+			}
 		}
 	}
 

@@ -33,6 +33,10 @@ public class CORStripes extends Configured implements Tool {
 	 */
 	private static class CORMapper1 extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
+
+		private final static IntWritable ONE = new IntWritable(1);
+		private final static Text WORD = new Text();
+
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
@@ -43,6 +47,11 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while(doc_tokenizer.hasMoreTokens()){
+				String word = doc_tokenizer.nextToken();
+				WORD.set(word);
+				context.write(WORD, ONE);
+			}
 		}
 	}
 
@@ -51,11 +60,20 @@ public class CORStripes extends Configured implements Tool {
 	 */
 	private static class CORReducer1 extends
 			Reducer<Text, IntWritable, Text, IntWritable> {
+
+		private final static IntWritable VALUE = new IntWritable();
+
 		@Override
 		public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for(IntWritable value : values){
+				sum += value.get();
+			}
+			VALUE.set(sum);
+			context.write(key, VALUE);
 		}
 	}
 
@@ -63,6 +81,9 @@ public class CORStripes extends Configured implements Tool {
 	 * TODO: Write your second-pass Mapper here.
 	 */
 	public static class CORStripesMapper2 extends Mapper<LongWritable, Text, Text, MapWritable> {
+	
+		private static final MapWritable STRIPE = new MapWritable();
+
 		@Override
 		protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			Set<String> sorted_word_set = new TreeSet<String>();
@@ -75,6 +96,25 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			List<String> sortedWords = new ArrayList<String>(sorted_word_set);
+
+			for(int i = 0; i < sortedWords.size(); i++){
+				Text first_key = new Text(sortedWords.get(i));
+
+				for(int j = i + 1 ; j < sortedWords.size(); j++){
+					String second_word = sortedWords.get(j);
+					Text sub_map_key = new Text(second_word);
+
+					if(STRIPE.containsKey(sub_map_key)){
+						IntWritable count = (IntWritable) STRIPE.get(sub_map_key);
+						count.set(count.get() + 1);
+					} else{
+						STRIPE.put(sub_map_key, new IntWritable(1));
+					}
+				}
+				context.write(first_key, STRIPE);
+				STRIPE.clear();
+			}
 		}
 	}
 
@@ -84,11 +124,30 @@ public class CORStripes extends Configured implements Tool {
 	public static class CORStripesCombiner2 extends Reducer<Text, MapWritable, Text, MapWritable> {
 		static IntWritable ZERO = new IntWritable(0);
 
+		private static final MapWritable STRIPE = new MapWritable();
+
 		@Override
 		protected void reduce(Text key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for(MapWritable subMap : values){ // take a sub map
+				// take keys in the sub map
+				for(Writable writableKey : subMap.keySet()){
+					Text sub_map_key = (Text) writableKey;
+					
+					if(STRIPE.containsKey(sub_map_key)){
+						IntWritable count = (IntWritable) STRIPE.get(sub_map_key);
+						count.set(count.get() + 1);
+					}else{
+						STRIPE.put(sub_map_key, new IntWritable(1));
+					}
+					
+				}	
+			}	
+			// After adding all the submaps together	
+			context.write(key, STRIPE);
+			STRIPE.clear();
 		}
 	}
 
@@ -98,6 +157,7 @@ public class CORStripes extends Configured implements Tool {
 	public static class CORStripesReducer2 extends Reducer<Text, MapWritable, PairOfStrings, DoubleWritable> {
 		private static Map<String, Integer> word_total_map = new HashMap<String, Integer>();
 		private static IntWritable ZERO = new IntWritable(0);
+		private final static PairOfStrings BIGRAM = new PairOfStrings();
 
 		/*
 		 * Preload the middle result file.
@@ -142,6 +202,15 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for(MapWritable subMap : values){
+				for(Writable writableKey : subMap.keySet()){
+					Text sub_map_key = (Text) writableKey;
+					BIGRAM.set(key.toString(), sub_map_key.toString());
+					double numerator = ((IntWritable)subMap.get(sub_map_key)).get();
+					int denominator = word_total_map.get(key.toString()) * word_total_map.get(sub_map_key.toString());
+					context.write(BIGRAM, new DoubleWritable(numerator / denominator));
+				}	
+			}
 		}
 	}
 
